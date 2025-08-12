@@ -263,7 +263,11 @@ metadata:
 
 test_plan:
   current_focus:
-    - "User Profile Endpoint"
+    - "Tasks Management API"
+    - "Task Applications API"
+    - "Messaging API"
+    - "Profile Management API"
+    - "Categories API"
   stuck_tasks:
     - "User Profile Endpoint"
   test_all: false
