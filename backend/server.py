@@ -177,15 +177,88 @@ async def setup_database():
 
 @api_router.get("/service-categories")
 async def get_service_categories():
+    """Get TaskRabbit-style service categories"""
     categories = [
-        {"id": "1", "name": "Plumbing", "icon": "water", "description": "Plumbing repairs and installations"},
-        {"id": "2", "name": "Electrical", "icon": "flash", "description": "Electrical work and repairs"},
-        {"id": "3", "name": "Cleaning", "icon": "sparkles", "description": "Home and office cleaning services"},
-        {"id": "4", "name": "Photography", "icon": "camera", "description": "Photography and videography services"},
-        {"id": "5", "name": "IT Support", "icon": "laptop", "description": "Computer and IT support"},
-        {"id": "6", "name": "Carpentry", "icon": "hammer", "description": "Woodworking and carpentry"},
-        {"id": "7", "name": "Gardening", "icon": "leaf", "description": "Landscaping and gardening"},
-        {"id": "8", "name": "Moving", "icon": "car", "description": "Moving and transportation services"},
+        {
+            "id": "1",
+            "name": "Mounting & Installation", 
+            "slug": "mounting",
+            "icon": "construct", 
+            "color": "#FF6B35",
+            "description": "TV mounting, shelves, art, mirrors"
+        },
+        {
+            "id": "2", 
+            "name": "Furniture Assembly", 
+            "slug": "furniture",
+            "icon": "construct", 
+            "color": "#4ECDC4",
+            "description": "IKEA and other furniture assembly"
+        },
+        {
+            "id": "3", 
+            "name": "Moving Help", 
+            "slug": "moving",
+            "icon": "car", 
+            "color": "#45B7D1",
+            "description": "Loading, unloading, packing assistance"
+        },
+        {
+            "id": "4", 
+            "name": "Cleaning", 
+            "slug": "cleaning",
+            "icon": "sparkles", 
+            "color": "#96CEB4",
+            "description": "Home cleaning, deep cleaning, organizing"
+        },
+        {
+            "id": "5", 
+            "name": "Delivery", 
+            "slug": "delivery",
+            "icon": "bicycle", 
+            "color": "#FFEAA7",
+            "description": "Pick up and delivery services"
+        },
+        {
+            "id": "6", 
+            "name": "Handyman", 
+            "slug": "handyman",
+            "icon": "hammer", 
+            "color": "#DDA0DD",
+            "description": "General repairs and maintenance"
+        },
+        {
+            "id": "7", 
+            "name": "Electrical", 
+            "slug": "electrical",
+            "icon": "flash", 
+            "color": "#FFD93D",
+            "description": "Light fixtures, outlets, switches"
+        },
+        {
+            "id": "8", 
+            "name": "Plumbing", 
+            "slug": "plumbing",
+            "icon": "water", 
+            "color": "#6C5CE7",
+            "description": "Faucets, toilets, minor repairs"
+        },
+        {
+            "id": "9", 
+            "name": "Painting", 
+            "slug": "painting",
+            "icon": "color-palette", 
+            "color": "#FF7675",
+            "description": "Interior painting, touch-ups"
+        },
+        {
+            "id": "10", 
+            "name": "Yard Work", 
+            "slug": "yard",
+            "icon": "leaf", 
+            "color": "#00B894",
+            "description": "Lawn care, gardening, landscaping"
+        }
     ]
     return categories
 
