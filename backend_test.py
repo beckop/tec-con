@@ -424,6 +424,10 @@ class SkillHubAPITester:
             if response.status_code == 404:
                 self.log_result("Apply to Task", True, 
                               f"Expected 404 for non-existent task: {response.status_code}")
+            elif response.status_code == 403:
+                # Expected since demo user has "customer" role, not "tasker"
+                self.log_result("Apply to Task", True, 
+                              f"Expected 403 for customer role (only taskers can apply): {response.status_code}")
             elif response.status_code == 200:
                 data = response.json()
                 self.log_result("Apply to Task", True, f"Application submitted: {data}", data)
