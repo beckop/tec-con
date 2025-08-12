@@ -108,35 +108,56 @@ export const useTasks = () => {
 
       const { data, error } = await query.order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error('Tasks fetch error:', error)
+        // If tables don't exist, return empty array instead of error
+        if (error.message.includes('relation "public.tasks" does not exist') || 
+            error.message.includes('relation "public.task_categories" does not exist') ||
+            error.message.includes('relation "public.profiles" does not exist')) {
+          console.log('Database tables not set up yet, returning empty tasks list')
+          setTasks([])
+          return
+        }
+        throw error
+      }
 
       // Get application counts for each task
       if (data && data.length > 0) {
-        const taskIds = data.map(task => task.id)
-        const { data: applicationCounts } = await supabase
-          .from('task_applications')
-          .select('task_id')
-          .in('task_id', taskIds)
+        try {
+          const taskIds = data.map(task => task.id)
+          const { data: applicationCounts } = await supabase
+            .from('task_applications')
+            .select('task_id')
+            .in('task_id', taskIds)
 
-        // Count applications per task
-        const countsMap = applicationCounts?.reduce((acc, app) => {
-          acc[app.task_id] = (acc[app.task_id] || 0) + 1
-          return acc
-        }, {} as Record<string, number>) || {}
+          // Count applications per task
+          const countsMap = applicationCounts?.reduce((acc, app) => {
+            acc[app.task_id] = (acc[app.task_id] || 0) + 1
+            return acc
+          }, {} as Record<string, number>) || {}
 
-        // Add counts to tasks
-        const tasksWithCounts = data.map(task => ({
-          ...task,
-          applications_count: countsMap[task.id] || 0
-        }))
+          // Add counts to tasks
+          const tasksWithCounts = data.map(task => ({
+            ...task,
+            applications_count: countsMap[task.id] || 0
+          }))
 
-        setTasks(tasksWithCounts)
+          setTasks(tasksWithCounts)
+        } catch (appError) {
+          console.log('Application counts fetch failed, using tasks without counts')
+          setTasks(data.map(task => ({ ...task, applications_count: 0 })))
+        }
       } else {
         setTasks([])
       }
     } catch (err: any) {
       console.error('Error fetching tasks:', err)
-      setError(err.message)
+      // Don't set error state for database issues, just return empty list
+      if (err.message?.includes('relation') && err.message?.includes('does not exist')) {
+        setTasks([])
+      } else {
+        setError(err.message)
+      }
     } finally {
       setLoading(false)
     }
