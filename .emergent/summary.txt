@@ -1,0 +1,58 @@
+<analysis>
+The AI engineer successfully initiated a cross-platform mobile app using Expo, FastAPI, and Supabase. The initial phase focused on setting up the environment, Supabase integration, and implementing core authentication and routing. A significant hurdle was encountered with frontend preview issues (502 errors, blank screens) which required extensive troubleshooting, including resolving conflicting ngrok processes and addressing an AsyncStorage compatibility issue for web builds. Upon resolution, a functional sign-in/sign-up flow with role selection was demonstrated. Following user feedback, the project pivoted to a TaskRabbit-like design, leading to the development of role-based dashboards, a detailed Supabase SQL schema for database setup, and the start of implementing core features like task browsing, chat, and task assignment. The project is currently focused on making all listed features fully functional with database integration.
+</analysis>
+
+<product_requirements>
+The goal is to build a cross-platform (iOS & Android) mobile app, SkillHub, connecting customers with technicians for various services (plumbing, IT, photography). Key features include a single login system with Customer/Technician roles. Customers can search/filter technicians, view profiles, book directly, post jobs, and approve applications, with in-app chat, secure payment (currently deferred), and booking history. Technicians can manage profiles, accept/decline bookings, browse/apply to jobs, use in-app chat, update job status, and manage earnings. The backend uses Supabase for authentication, role-based access, file storage (base64 for images), and real-time updates. Push notifications, ratings/reviews, and a commission-based revenue model are also required. The UI must be modern and mobile-optimized, focusing on Book Technician and Post Job flows, with a strong emphasis on a TaskRabbit-like user experience, including specific service categories and distinct role-based dashboards.
+</product_requirements>
+
+<key_technical_concepts>
+- **Frontend**: Expo, React Native, Expo Router, , , , , , , , ,  image storage.
+- **Backend**: FastAPI, MongoDB (initial setup, later shifted to Supabase/PostgreSQL).
+- **Database**: Supabase (PostgreSQL), with real-time updates, authentication, Row Level Security (RLS), and custom SQL schema for , , , , , , .
+- **Real-time Communication**:  (planned).
+</key_technical_concepts>
+
+<code_architecture>
+
+
+-   ****: FastAPI backend. Initially set up with MongoDB, then stripped and updated to interact with Supabase. It contained placeholder logic for schema creation (though SQL was later provided directly).
+-   ** & **: Environment variables for Supabase URL/keys, crucial for connecting frontend and backend to the Supabase project.
+-   ****: Configures the Supabase client. This file was critical for resolving the  issue during web builds, ensuring cross-platform compatibility for Supabase authentication.
+-   ****: Root layout for Expo Router, handling global navigation, authentication context, and initial routing logic.
+-   ****: The initial entry point, handling redirects based on authentication status (to sign-in or home).
+-   ** & **: Implement user authentication (sign-in, sign-up) with email/password and role selection (Customer/Technician) using Supabase Auth.
+-   ****: Placeholder for initial user profile setup post-registration.
+-   ****: Screen for managing user profiles (Customer/Technician).
+-   ****: Screen for customers to search and filter technicians.
+-   ****: Screen for customers to post new service jobs.
+-   ****: Manages user authentication state and role (Customer/Technician) across the application, making user data and session accessible globally.
+-   **, , **: These files implement the distinct, role-based dashboards in a TaskRabbit-style UI, providing different experiences for Customers and Technicians upon login.  acts as a switcher.
+-   ****: Allows technicians to browse available job postings.
+-   ****: Intended for in-app messaging.
+-   ****: Designed to display details of a specific task, including chat functionality and task assignment features.
+-   ****: Contains the complete SQL script for creating all necessary PostgreSQL tables (profiles, task\_categories, tasks, task\_applications, reviews, messages, notifications) in Supabase, along with RLS policies and indexes. This was provided for manual execution.
+</code_architecture>
+
+<pending_tasks>
+- Fully implement job posting flow with real data persistence.
+- Complete task assignment and scheduling functionality.
+- Develop the in-app chat system for real-time communication.
+- Connect dashboards to show real-time user-specific data.
+- Integrate the task application system.
+</pending_tasks>
+
+<current_work>
+The current focus is on making the TaskRabbit-style application fully functional with real database integration. The AI engineer has successfully transformed the UI to reflect distinct Customer and Tasker dashboards, populated with TaskRabbit-like service categories. A comprehensive Supabase SQL schema () has been provided to the user for manual creation of all necessary database tables (profiles, tasks, categories, applications, reviews, messages, notifications), ensuring data persistence and role-based security.
+
+On the frontend, the  has been updated to manage user roles effectively. The  component now dynamically renders either  or  based on the logged-in user's role. Work is actively underway on implementing core functionalities:
+-    has been created for technicians to view available jobs.
+-    is currently being implemented, intended to serve as the screen where users can view specific task details, engage in chat, and handle task assignment.
+-    is likely being integrated within the  context or as a standalone screen for direct messaging.
+
+The app currently presents functional sign-in/sign-up, correct role selection, and visually distinct dashboards. The next step is to connect these interfaces to the database for live data and enable interaction flows like job posting, task browsing, applying to jobs, and in-app chat.
+</current_work>
+
+<optional_next_step>
+Complete the implementation of the  screen, including chat functionality and task assignment features.
+</optional_next_step>
