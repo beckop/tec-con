@@ -209,3 +209,5 @@ test_plan:
 agent_communication:
     - agent: "testing"
       message: "Completed comprehensive backend API testing. 7 out of 8 tests passed (87.5% success rate). Only issue is profiles endpoint failing due to missing Supabase table. All authentication, booking creation, service categories, and health checks working correctly. API is production-ready except for profiles table setup."
+    - agent: "main"
+      message: "Starting TaskRabbit functionality implementation. Need to expand backend API with task management, messaging, and application endpoints. Will implement missing frontend screens for complete user flow."
