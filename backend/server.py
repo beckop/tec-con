@@ -134,6 +134,47 @@ async def health_check():
         }
     }
 
+@api_router.post("/setup-database")
+async def setup_database():
+    """Setup the database schema for TaskRabbit-like app"""
+    try:
+        # Create profiles table
+        profiles_sql = """
+        CREATE TABLE IF NOT EXISTS profiles (
+          id uuid REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+          email text UNIQUE NOT NULL,
+          full_name text NOT NULL,
+          username text UNIQUE NOT NULL,
+          avatar_url text,
+          phone text,
+          role text CHECK (role IN ('customer', 'tasker')) NOT NULL DEFAULT 'customer',
+          hourly_rate decimal(10,2),
+          bio text,
+          skills text[],
+          available boolean DEFAULT true,
+          verification_status text CHECK (verification_status IN ('pending', 'verified', 'rejected')) DEFAULT 'pending',
+          address text,
+          city text,
+          state text,
+          zip_code text,
+          latitude decimal(10, 8),
+          longitude decimal(11, 8),
+          total_tasks_completed integer DEFAULT 0,
+          average_rating decimal(3,2) DEFAULT 0,
+          total_reviews integer DEFAULT 0,
+          created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+          updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+        );
+        """
+        
+        # Execute using service role
+        result = supabase_admin.rpc('exec_sql', {'sql': profiles_sql}).execute()
+        
+        return {"message": "Database setup completed", "result": result.data}
+    except Exception as e:
+        logger.error(f"Database setup error: {e}")
+        return {"message": "Database setup failed", "error": str(e)}
+
 @api_router.get("/service-categories")
 async def get_service_categories():
     categories = [
