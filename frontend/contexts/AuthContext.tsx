@@ -16,7 +16,7 @@ interface AuthContextType {
 interface SignUpData {
   full_name: string
   username: string
-  role: 'customer' | 'technician'
+  role: 'customer' | 'tasker'
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -38,12 +38,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Initial session:', session?.user?.email)
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
         fetchProfile(session.user.id)
+      } else {
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     // Listen for auth changes
@@ -58,9 +60,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await fetchProfile(session.user.id)
       } else {
         setProfile(null)
+        setLoading(false)
       }
-      
-      setLoading(false)
     })
 
     return () => subscription.unsubscribe()
@@ -68,42 +69,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user:', userId)
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single()
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile:', error)
-        return
+      if (error) {
+        if (error.code === 'PGRST116') {
+          console.log('Profile not found, will be created by trigger')
+          // Profile doesn't exist yet, but should be created by trigger
+          // Wait a moment and try again
+          setTimeout(() => fetchProfile(userId), 1000)
+          return
+        }
+        throw error
       }
 
       if (data) {
+        console.log('Profile loaded:', data.role, data.full_name)
         setProfile(data)
       }
+      setLoading(false)
     } catch (error) {
       console.error('Error fetching profile:', error)
+      setLoading(false)
     }
   }
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (error) throw error
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (error) throw error
+    } catch (error) {
+      setLoading(false)
+      throw error
+    }
   }
 
   const signUp = async (email: string, password: string, userData: SignUpData) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: userData,
-      },
-    })
-    if (error) throw error
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: userData.full_name,
+            username: userData.username,
+            role: userData.role,
+          },
+        },
+      })
+      if (error) throw error
+    } catch (error) {
+      setLoading(false)
+      throw error
+    }
   }
 
   const signOut = async () => {

@@ -20,7 +20,7 @@ export default function Auth() {
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [username, setUsername] = useState('')
-  const [role, setRole] = useState<'customer' | 'technician'>('customer')
+  const [role, setRole] = useState<'customer' | 'tasker'>('customer')
   const [loading, setLoading] = useState(false)
 
   const { signIn, signUp } = useAuth()
@@ -34,8 +34,9 @@ export default function Auth() {
     setLoading(true)
     try {
       await signIn(email, password)
-      router.replace('/home')
+      // Navigation will be handled by the auth context
     } catch (error: any) {
+      console.error('Sign in error:', error)
       Alert.alert('Sign In Error', error.message)
     } finally {
       setLoading(false)
@@ -53,6 +54,12 @@ export default function Auth() {
       return
     }
 
+    // Validate username
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      Alert.alert('Error', 'Username can only contain letters, numbers, and underscores')
+      return
+    }
+
     setLoading(true)
     try {
       await signUp(email, password, {
@@ -60,8 +67,22 @@ export default function Auth() {
         username,
         role,
       })
-      Alert.alert('Success', 'Account created! Please check your email to verify your account.')
+      
+      Alert.alert(
+        'Success!', 
+        'Account created successfully! You can now sign in.',
+        [
+          {
+            text: 'Sign In Now',
+            onPress: () => {
+              setIsSignUp(false)
+              setPassword('')
+            }
+          }
+        ]
+      )
     } catch (error: any) {
+      console.error('Sign up error:', error)
       Alert.alert('Sign Up Error', error.message)
     } finally {
       setLoading(false)
@@ -76,7 +97,7 @@ export default function Auth() {
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.header}>
-            <Text style={styles.title}>SkillHub</Text>
+            <Text style={styles.title}>TaskHub</Text>
             <Text style={styles.subtitle}>
               {isSignUp ? 'Create your account' : 'Welcome back'}
             </Text>
@@ -122,7 +143,7 @@ export default function Auth() {
                 />
 
                 <View style={styles.roleContainer}>
-                  <Text style={styles.roleLabel}>Account Type:</Text>
+                  <Text style={styles.roleLabel}>I want to:</Text>
                   <View style={styles.roleButtons}>
                     <TouchableOpacity
                       style={[
@@ -137,24 +158,36 @@ export default function Auth() {
                           role === 'customer' && styles.roleButtonTextActive,
                         ]}
                       >
-                        Customer
+                        Hire Taskers
+                      </Text>
+                      <Text style={[
+                        styles.roleButtonDesc,
+                        role === 'customer' && styles.roleButtonDescActive,
+                      ]}>
+                        Post tasks and hire help
                       </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       style={[
                         styles.roleButton,
-                        role === 'technician' && styles.roleButtonActive,
+                        role === 'tasker' && styles.roleButtonActive,
                       ]}
-                      onPress={() => setRole('technician')}
+                      onPress={() => setRole('tasker')}
                     >
                       <Text
                         style={[
                           styles.roleButtonText,
-                          role === 'technician' && styles.roleButtonTextActive,
+                          role === 'tasker' && styles.roleButtonTextActive,
                         ]}
                       >
-                        Technician
+                        Work as Tasker
+                      </Text>
+                      <Text style={[
+                        styles.roleButtonDesc,
+                        role === 'tasker' && styles.roleButtonDescActive,
+                      ]}>
+                        Earn money helping others
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -168,7 +201,7 @@ export default function Auth() {
               disabled={loading}
             >
               <Text style={styles.buttonText}>
-                {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
+                {loading ? 'Loading...' : isSignUp ? 'Create Account' : 'Sign In'}
               </Text>
             </TouchableOpacity>
 
@@ -236,18 +269,16 @@ const styles = StyleSheet.create({
   roleLabel: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 12,
     color: '#333',
   },
   roleButtons: {
-    flexDirection: 'row',
     gap: 12,
   },
   roleButton: {
-    flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#ddd',
     backgroundColor: '#f9f9f9',
@@ -261,9 +292,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#666',
+    marginBottom: 4,
   },
   roleButtonTextActive: {
     color: '#fff',
+  },
+  roleButtonDesc: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+  },
+  roleButtonDescActive: {
+    color: '#fff',
+    opacity: 0.9,
   },
   button: {
     height: 50,
