@@ -6,27 +6,21 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../contexts/AuthContext'
+import { useTasks } from '../hooks/useTasks'
+import { useCategories } from '../hooks/useCategories'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
-// TaskRabbit-style service categories
-const TASKRABBIT_CATEGORIES = [
-  { id: '1', name: 'Mounting & Installation', icon: 'construct', color: '#FF6B35', description: 'TV mounting, shelves, art' },
-  { id: '2', name: 'Furniture Assembly', icon: 'construct', color: '#4ECDC4', description: 'IKEA and other furniture' },
-  { id: '3', name: 'Moving Help', icon: 'car', color: '#45B7D1', description: 'Loading, unloading, packing' },
-  { id: '4', name: 'Cleaning', icon: 'sparkles', color: '#96CEB4', description: 'Home and deep cleaning' },
-  { id: '5', name: 'Delivery', icon: 'bicycle', color: '#FFEAA7', description: 'Pick up and delivery' },
-  { id: '6', name: 'Handyman', icon: 'hammer', color: '#DDA0DD', description: 'General repairs' },
-  { id: '7', name: 'Electrical', icon: 'flash', color: '#FFD93D', description: 'Light fixtures, outlets' },
-  { id: '8', name: 'Plumbing', icon: 'water', color: '#6C5CE7', description: 'Faucets, toilets' },
-]
-
 export default function Home() {
   const { profile, signOut } = useAuth()
+  const { tasks, loading: tasksLoading, refetch: refetchTasks } = useTasks()
+  const { categories, loading: categoriesLoading } = useCategories()
   const [greeting, setGreeting] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     const hour = new Date().getHours()
@@ -34,6 +28,12 @@ export default function Home() {
     else if (hour < 18) setGreeting('Good afternoon')
     else setGreeting('Good evening')
   }, [])
+
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await refetchTasks()
+    setRefreshing(false)
+  }
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -55,17 +55,30 @@ export default function Home() {
 
   const navigateToCategory = (category: any) => {
     if (profile?.role === 'customer') {
-      router.push(`/book-task?category=${category.name}`)
+      router.push(`/post-task?category=${category.id}`)
     } else {
-      router.push(`/browse-tasks?category=${category.name}`)
+      router.push(`/browse-tasks?category=${category.id}`)
     }
   }
+
+  // Calculate stats
+  const completedTasks = tasks.filter(task => task.status === 'completed').length
+  const activeTasks = tasks.filter(task => ['posted', 'assigned', 'in_progress'].includes(task.status)).length
+  const totalEarnings = tasks
+    .filter(task => task.status === 'completed' && task.final_price)
+    .reduce((sum, task) => sum + (task.final_price || 0), 0)
 
   // Render Customer Dashboard
   if (profile?.role === 'customer') {
     return (
       <SafeAreaView style={styles.container}>
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           {/* Header */}
           <View style={styles.header}>
             <View>
@@ -92,28 +105,34 @@ export default function Home() {
               onPress={() => router.push('/my-tasks')}
             >
               <Ionicons name="list" size={24} color="#fff" />
-              <Text style={styles.actionButtonText}>My Tasks</Text>
+              <Text style={styles.actionButtonText}>My Tasks ({activeTasks})</Text>
             </TouchableOpacity>
           </View>
 
           {/* Popular Categories */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Popular Categories</Text>
-            <View style={styles.categoriesGrid}>
-              {TASKRABBIT_CATEGORIES.slice(0, 6).map((category) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={styles.categoryCard}
-                  onPress={() => navigateToCategory(category)}
-                >
-                  <View style={[styles.categoryIcon, { backgroundColor: category.color }]}>
-                    <Ionicons name={category.icon as any} size={28} color="#fff" />
-                  </View>
-                  <Text style={styles.categoryName}>{category.name}</Text>
-                  <Text style={styles.categoryDesc}>{category.description}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {categoriesLoading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading categories...</Text>
+              </View>
+            ) : (
+              <View style={styles.categoriesGrid}>
+                {categories.slice(0, 6).map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={styles.categoryCard}
+                    onPress={() => navigateToCategory(category)}
+                  >
+                    <View style={[styles.categoryIcon, { backgroundColor: category.color }]}>
+                      <Ionicons name={category.icon as any} size={28} color="#fff" />
+                    </View>
+                    <Text style={styles.categoryName}>{category.name}</Text>
+                    <Text style={styles.categoryDesc}>{category.description}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
             
             <TouchableOpacity 
               style={styles.viewAllButton}
@@ -124,16 +143,50 @@ export default function Home() {
             </TouchableOpacity>
           </View>
 
-          {/* Recent Activity */}
+          {/* Recent Tasks */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
-            <View style={styles.emptyState}>
-              <Ionicons name="time" size={48} color="#ccc" />
-              <Text style={styles.emptyStateText}>No recent tasks</Text>
-              <Text style={styles.emptyStateSubtext}>
-                Post your first task to get started
-              </Text>
-            </View>
+            <Text style={styles.sectionTitle}>Recent Tasks</Text>
+            {tasksLoading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading tasks...</Text>
+              </View>
+            ) : tasks.length > 0 ? (
+              <View>
+                {tasks.slice(0, 3).map((task) => (
+                  <TouchableOpacity 
+                    key={task.id} 
+                    style={styles.taskCard}
+                    onPress={() => router.push(`/task/${task.id}`)}
+                  >
+                    <View style={styles.taskHeader}>
+                      <Text style={styles.taskTitle}>{task.title}</Text>
+                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(task.status) }]}>
+                        <Text style={styles.statusText}>{task.status}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.taskCategory}>{task.task_categories?.name}</Text>
+                    <Text style={styles.taskApplications}>
+                      {task.applications_count || 0} applications
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity 
+                  style={styles.viewAllButton}
+                  onPress={() => router.push('/my-tasks')}
+                >
+                  <Text style={styles.viewAllText}>View All Tasks</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#007AFF" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="time" size={48} color="#ccc" />
+                <Text style={styles.emptyStateText}>No tasks yet</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  Post your first task to get started
+                </Text>
+              </View>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -143,15 +196,23 @@ export default function Home() {
   // Render Tasker Dashboard
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>{greeting}!</Text>
             <Text style={styles.userName}>{profile?.full_name}</Text>
             <View style={styles.statusContainer}>
-              <View style={[styles.statusDot, { backgroundColor: '#28a745' }]} />
-              <Text style={styles.statusText}>Available for tasks</Text>
+              <View style={[styles.statusDot, { backgroundColor: profile?.available ? '#28a745' : '#dc3545' }]} />
+              <Text style={[styles.statusText, { color: profile?.available ? '#28a745' : '#dc3545' }]}>
+                {profile?.available ? 'Available for tasks' : 'Not available'}
+              </Text>
             </View>
           </View>
           <TouchableOpacity onPress={() => router.push('/profile')} style={styles.profileButton}>
@@ -162,15 +223,15 @@ export default function Home() {
         {/* Tasker Stats */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>0</Text>
+            <Text style={styles.statValue}>{completedTasks}</Text>
             <Text style={styles.statLabel}>Tasks Completed</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>$0</Text>
-            <Text style={styles.statLabel}>Earnings</Text>
+            <Text style={styles.statValue}>${totalEarnings.toFixed(0)}</Text>
+            <Text style={styles.statLabel}>Total Earned</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>0.0</Text>
+            <Text style={styles.statValue}>{profile?.average_rating?.toFixed(1) || '0.0'}</Text>
             <Text style={styles.statLabel}>Rating</Text>
           </View>
         </View>
@@ -190,49 +251,88 @@ export default function Home() {
             onPress={() => router.push('/my-tasks')}
           >
             <Ionicons name="calendar" size={24} color="#fff" />
-            <Text style={styles.actionButtonText}>My Schedule</Text>
+            <Text style={styles.actionButtonText}>My Tasks ({activeTasks})</Text>
           </TouchableOpacity>
         </View>
 
         {/* Available Categories */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Task Categories</Text>
-          <View style={styles.categoriesGrid}>
-            {TASKRABBIT_CATEGORIES.slice(0, 4).map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                style={styles.categoryCard}
-                onPress={() => navigateToCategory(category)}
-              >
-                <View style={[styles.categoryIcon, { backgroundColor: category.color }]}>
-                  <Ionicons name={category.icon as any} size={28} color="#fff" />
-                </View>
-                <Text style={styles.categoryName}>{category.name}</Text>
-                <Text style={styles.categoryDesc}>{category.description}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {categoriesLoading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading categories...</Text>
+            </View>
+          ) : (
+            <View style={styles.categoriesGrid}>
+              {categories.slice(0, 4).map((category) => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={styles.categoryCard}
+                  onPress={() => navigateToCategory(category)}
+                >
+                  <View style={[styles.categoryIcon, { backgroundColor: category.color }]}>
+                    <Ionicons name={category.icon as any} size={28} color="#fff" />
+                  </View>
+                  <Text style={styles.categoryName}>{category.name}</Text>
+                  <Text style={styles.categoryDesc}>{category.description}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
-        {/* Task Alerts */}
+        {/* Recent Applications/Tasks */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Task Alerts</Text>
-          <View style={styles.alertCard}>
-            <Ionicons name="notifications" size={24} color="#007AFF" />
-            <View style={styles.alertContent}>
-              <Text style={styles.alertTitle}>Get notified of new tasks</Text>
-              <Text style={styles.alertSubtitle}>
-                Turn on notifications to get alerts when tasks in your area are posted
+          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          {tasksLoading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading activity...</Text>
+            </View>
+          ) : tasks.length > 0 ? (
+            <View>
+              {tasks.slice(0, 3).map((task) => (
+                <TouchableOpacity 
+                  key={task.id} 
+                  style={styles.taskCard}
+                  onPress={() => router.push(`/task/${task.id}`)}
+                >
+                  <View style={styles.taskHeader}>
+                    <Text style={styles.taskTitle}>{task.title}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(task.status) }]}>
+                      <Text style={styles.statusText}>{task.status}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.taskCategory}>{task.task_categories?.name}</Text>
+                  <Text style={styles.taskBudget}>
+                    ${task.budget_min}-${task.budget_max}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="briefcase" size={48} color="#ccc" />
+              <Text style={styles.emptyStateText}>No activity yet</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Start browsing tasks to build your reputation
               </Text>
             </View>
-            <TouchableOpacity style={styles.alertButton}>
-              <Text style={styles.alertButtonText}>Enable</Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
   )
+}
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'posted': return '#007AFF'
+    case 'assigned': return '#ffc107'
+    case 'in_progress': return '#17a2b8'
+    case 'completed': return '#28a745'
+    case 'cancelled': return '#dc3545'
+    default: return '#6c757d'
+  }
 }
 
 const styles = StyleSheet.create({
@@ -275,7 +375,6 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 14,
-    color: '#28a745',
     fontWeight: '500',
   },
   profileButton: {
@@ -339,6 +438,13 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 16,
   },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#666',
+  },
   categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -390,6 +496,55 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontWeight: '600',
   },
+  taskCard: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  taskHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  taskTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+    marginRight: 12,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+    textTransform: 'capitalize',
+  },
+  taskCategory: {
+    fontSize: 14,
+    color: '#007AFF',
+    marginBottom: 4,
+  },
+  taskApplications: {
+    fontSize: 14,
+    color: '#666',
+  },
+  taskBudget: {
+    fontSize: 14,
+    color: '#28a745',
+    fontWeight: '600',
+  },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
@@ -408,43 +563,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     paddingHorizontal: 40,
-  },
-  alertCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  alertContent: {
-    flex: 1,
-  },
-  alertTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  alertSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-  },
-  alertButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  alertButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
 })
