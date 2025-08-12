@@ -31,7 +31,7 @@ API_BASE = f"{BASE_URL}/api"
 class SkillHubAPITester:
     def __init__(self):
         self.results = []
-        self.auth_token = "demo-test-token-123"  # Demo token for testing
+        self.auth_token = "demo-token"  # Demo token for testing as specified in review request
         
     def log_result(self, test_name: str, success: bool, details: str, response_data: Any = None):
         """Log test result"""
