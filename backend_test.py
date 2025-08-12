@@ -601,7 +601,7 @@ class SkillHubAPITester:
         print(f"📍 Testing against: {API_BASE}")
         print("=" * 60)
         
-        # Test all endpoints
+        # Test existing endpoints
         self.test_api_root()
         self.test_health_check()
         self.test_service_categories()
@@ -610,6 +610,23 @@ class SkillHubAPITester:
         self.test_get_bookings_authenticated()
         self.test_create_booking_unauthenticated()
         self.test_create_booking_authenticated()
+        
+        # Test new TaskRabbit-style endpoints
+        print("\n🔧 Testing TaskRabbit-style API endpoints...")
+        self.test_get_tasks_unauthenticated()
+        self.test_get_tasks_authenticated()
+        self.test_create_task_unauthenticated()
+        self.test_create_task_authenticated()
+        self.test_get_task_details()
+        self.test_update_task()
+        self.test_get_task_applications()
+        self.test_apply_to_task()
+        self.test_update_application()
+        self.test_get_task_messages()
+        self.test_send_task_message()
+        self.test_get_current_profile()
+        self.test_update_current_profile()
+        self.test_get_categories()
         
         # Summary
         print("\n" + "=" * 60)
