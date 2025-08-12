@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -6,193 +6,200 @@ import {
   StyleSheet,
   FlatList,
   Alert,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
-
-interface Task {
-  id: string
-  title: string
-  description: string
-  category: string
-  taskSize: 'small' | 'medium' | 'large'
-  budget: string
-  location: string
-  distance: string
-  postedAt: string
-  applications: number
-  customerName: string
-  customerRating: number
-  urgency: 'flexible' | 'within_week' | 'urgent'
-}
-
-// Mock tasks data (TaskRabbit style)
-const MOCK_TASKS: Task[] = [
-  {
-    id: '1',
-    title: 'Mount 65" TV above fireplace',
-    description: 'Need help mounting a 65 inch Samsung TV above the fireplace. TV and mount are already purchased. Just need installation.',
-    category: 'Mounting & Installation',
-    taskSize: 'medium',
-    budget: '$75-100',
-    location: 'Manhattan, NY',
-    distance: '1.2 mi',
-    postedAt: '2 hours ago',
-    applications: 3,
-    customerName: 'Sarah M.',
-    customerRating: 4.8,
-    urgency: 'within_week',
-  },
-  {
-    id: '2',
-    title: 'IKEA dresser assembly',
-    description: 'Need help assembling a 6-drawer IKEA HEMNES dresser. All parts and tools will be provided.',
-    category: 'Furniture Assembly',
-    taskSize: 'small',
-    budget: '$40-60',
-    location: 'Brooklyn, NY',
-    distance: '2.1 mi',
-    postedAt: '4 hours ago',
-    applications: 7,
-    customerName: 'Mike R.',
-    customerRating: 4.9,
-    urgency: 'flexible',
-  },
-  {
-    id: '3',
-    title: 'Help loading moving truck',
-    description: 'Need 2 people to help load a 20ft moving truck. 2 bedroom apartment, mostly boxes and some furniture.',
-    category: 'Moving Help',
-    taskSize: 'large',
-    budget: '$150-200',
-    location: 'Queens, NY',
-    distance: '3.2 mi',
-    postedAt: '1 day ago',
-    applications: 12,
-    customerName: 'Lisa K.',
-    customerRating: 4.6,
-    urgency: 'urgent',
-  },
-  {
-    id: '4',
-    title: 'Deep clean 3 bedroom apartment',
-    description: 'Post-construction deep cleaning needed. 3 bedrooms, 2 bathrooms, kitchen, living room. Supplies provided.',
-    category: 'Cleaning',
-    taskSize: 'large',
-    budget: '$200-300',
-    location: 'Manhattan, NY',
-    distance: '0.8 mi',
-    postedAt: '6 hours ago',
-    applications: 5,
-    customerName: 'John D.',
-    customerRating: 4.7,
-    urgency: 'within_week',
-  },
-]
-
-const getTaskSizeColor = (size: string) => {
-  switch (size) {
-    case 'small': return '#28a745'
-    case 'medium': return '#ffc107'
-    case 'large': return '#dc3545'
-    default: return '#6c757d'
-  }
-}
-
-const getUrgencyColor = (urgency: string) => {
-  switch (urgency) {
-    case 'urgent': return '#dc3545'
-    case 'within_week': return '#ffc107'
-    case 'flexible': return '#28a745'
-    default: return '#6c757d'
-  }
-}
+import { useAuth } from '../contexts/AuthContext'
+import { useTasks, useTaskApplications } from '../hooks/useTasks'
+import { useCategories } from '../hooks/useCategories'
 
 export default function BrowseTasks() {
   const { category } = useLocalSearchParams()
-  const [tasks] = useState<Task[]>(MOCK_TASKS)
+  const { profile } = useAuth()
+  const { tasks, loading: tasksLoading, refetch: refetchTasks } = useTasks()
+  const { applyToTask } = useTaskApplications()
+  const { categories } = useCategories()
   const [filter, setFilter] = useState<'all' | 'applied'>('all')
+  const [refreshing, setRefreshing] = useState(false)
   
-  const filteredTasks = category 
-    ? tasks.filter(task => task.category === category)
-    : tasks
+  // Filter tasks for taskers
+  const availableTasks = tasks.filter(task => {
+    // Only show unassigned tasks or tasks I'm assigned to
+    const isAvailable = task.status === 'posted' || task.tasker_id === profile?.id
+    
+    // Filter by category if specified
+    if (category && task.category_id !== category) {
+      return false
+    }
+    
+    return isAvailable
+  })
 
-  const handleApplyToTask = (task: Task) => {
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await refetchTasks()
+    setRefreshing(false)
+  }
+
+  const handleApplyToTask = (task: any) => {
     Alert.alert(
       'Apply to Task',
-      `Do you want to apply for "${task.title}"?`,
+      `Do you want to apply for "${task.title}"?\n\nBudget: $${task.budget_min}-${task.budget_max}`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Apply', 
-          onPress: () => {
-            Alert.alert('Application Sent', 'Your application has been sent to the customer. They will review and get back to you soon.')
-          }
+          onPress: () => showApplicationForm(task)
         },
       ]
     )
   }
 
-  const renderTask = ({ item }: { item: Task }) => (
+  const showApplicationForm = (task: any) => {
+    Alert.prompt(
+      'Application Message',
+      'Tell the customer why you\'re the right person for this job:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Apply', 
+          onPress: async (message) => {
+            if (message && message.trim()) {
+              try {
+                await applyToTask(task.id, {
+                  message: message.trim(),
+                  proposed_price: task.budget_max, // Default to max budget
+                })
+                Alert.alert('Success', 'Your application has been sent!')
+              } catch (error: any) {
+                Alert.alert('Error', error.message || 'Failed to apply to task')
+              }
+            }
+          }
+        },
+      ],
+      'plain-text',
+      '',
+      'default'
+    )
+  }
+
+  const getTaskSizeColor = (size: string) => {
+    switch (size) {
+      case 'small': return '#28a745'
+      case 'medium': return '#ffc107'
+      case 'large': return '#dc3545'
+      default: return '#6c757d'
+    }
+  }
+
+  const getUrgencyColor = (urgency: string) => {
+    switch (urgency) {
+      case 'urgent': return '#dc3545'
+      case 'within_week': return '#ffc107'
+      case 'flexible': return '#28a745'
+      default: return '#6c757d'
+    }
+  }
+
+  const getUrgencyLabel = (urgency: string) => {
+    switch (urgency) {
+      case 'urgent': return 'Urgent'
+      case 'within_week': return '1 Week'
+      case 'flexible': return 'Flexible'
+      default: return urgency
+    }
+  }
+
+  const calculateDistance = (task: any) => {
+    // Mock distance calculation
+    return `${(Math.random() * 5 + 0.5).toFixed(1)} mi`
+  }
+
+  const formatTimeAgo = (dateString: string) => {
+    const now = new Date()
+    const taskDate = new Date(dateString)
+    const diffInHours = Math.floor((now.getTime() - taskDate.getTime()) / (1000 * 60 * 60))
+    
+    if (diffInHours < 1) return 'Just posted'
+    if (diffInHours < 24) return `${diffInHours}h ago`
+    const diffInDays = Math.floor(diffInHours / 24)
+    return `${diffInDays}d ago`
+  }
+
+  const renderTask = ({ item: task }: { item: any }) => (
     <TouchableOpacity 
       style={styles.taskCard}
-      onPress={() => router.push(`/task/${item.id}`)}
+      onPress={() => router.push(`/task/${task.id}`)}
     >
       <View style={styles.taskHeader}>
         <View style={styles.taskTitleContainer}>
-          <Text style={styles.taskTitle}>{item.title}</Text>
+          <Text style={styles.taskTitle}>{task.title}</Text>
           <View style={styles.badgeContainer}>
-            <View style={[styles.sizeBadge, { backgroundColor: getTaskSizeColor(item.taskSize) }]}>
-              <Text style={styles.badgeText}>{item.taskSize}</Text>
+            <View style={[styles.sizeBadge, { backgroundColor: getTaskSizeColor(task.task_size) }]}>
+              <Text style={styles.badgeText}>{task.task_size}</Text>
             </View>
-            <View style={[styles.urgencyBadge, { backgroundColor: getUrgencyColor(item.urgency) }]}>
-              <Text style={styles.badgeText}>
-                {item.urgency === 'urgent' ? 'Urgent' : 
-                 item.urgency === 'within_week' ? '1 Week' : 'Flexible'}
-              </Text>
+            <View style={[styles.urgencyBadge, { backgroundColor: getUrgencyColor(task.urgency) }]}>
+              <Text style={styles.badgeText}>{getUrgencyLabel(task.urgency)}</Text>
             </View>
           </View>
         </View>
-        <Text style={styles.budget}>{item.budget}</Text>
+        <Text style={styles.budget}>
+          ${task.budget_min}-${task.budget_max}
+        </Text>
       </View>
 
-      <Text style={styles.category}>{item.category}</Text>
+      <Text style={styles.category}>{task.task_categories?.name}</Text>
       <Text style={styles.description} numberOfLines={2}>
-        {item.description}
+        {task.description}
       </Text>
 
       <View style={styles.taskFooter}>
         <View style={styles.locationContainer}>
           <Ionicons name="location" size={16} color="#666" />
-          <Text style={styles.location}>{item.location}</Text>
-          <Text style={styles.distance}>• {item.distance}</Text>
+          <Text style={styles.location}>{task.city}, {task.state}</Text>
+          <Text style={styles.distance}>• {calculateDistance(task)}</Text>
         </View>
-        <Text style={styles.postedAt}>{item.postedAt}</Text>
+        <Text style={styles.postedAt}>{formatTimeAgo(task.created_at)}</Text>
       </View>
 
       <View style={styles.customerInfo}>
         <View style={styles.customerDetails}>
-          <Text style={styles.customerName}>{item.customerName}</Text>
+          <Text style={styles.customerName}>{task.customer_profile?.full_name || 'Customer'}</Text>
           <View style={styles.ratingContainer}>
             <Ionicons name="star" size={14} color="#FFD700" />
-            <Text style={styles.rating}>{item.customerRating}</Text>
+            <Text style={styles.rating}>
+              {task.customer_profile?.average_rating?.toFixed(1) || '0.0'}
+            </Text>
+            <Text style={styles.reviews}>
+              ({task.customer_profile?.total_reviews || 0})
+            </Text>
           </View>
         </View>
         <View style={styles.applicantsContainer}>
           <Ionicons name="people" size={16} color="#666" />
-          <Text style={styles.applicants}>{item.applications} applied</Text>
+          <Text style={styles.applicants}>{task.applications_count || 0} applied</Text>
         </View>
       </View>
 
-      <TouchableOpacity 
-        style={styles.applyButton}
-        onPress={() => handleApplyToTask(item)}
-      >
-        <Text style={styles.applyButtonText}>Apply for Task</Text>
-      </TouchableOpacity>
+      {task.tasker_id === profile?.id ? (
+        <View style={styles.assignedButton}>
+          <Text style={styles.assignedButtonText}>Assigned to You</Text>
+        </View>
+      ) : (
+        <TouchableOpacity 
+          style={styles.applyButton}
+          onPress={() => handleApplyToTask(task)}
+        >
+          <Text style={styles.applyButtonText}>Apply for Task</Text>
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   )
+
+  const selectedCategory = categories.find(cat => cat.id === category)
 
   return (
     <SafeAreaView style={styles.container}>
@@ -202,7 +209,7 @@ export default function BrowseTasks() {
           <Ionicons name="arrow-back" size={24} color="#007AFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {category ? `${category} Tasks` : 'Browse Tasks'}
+          {selectedCategory ? `${selectedCategory.name} Tasks` : 'Browse Tasks'}
         </Text>
         <TouchableOpacity>
           <Ionicons name="filter" size={24} color="#007AFF" />
@@ -224,7 +231,7 @@ export default function BrowseTasks() {
               filter === 'all' && styles.filterTabTextActive,
             ]}
           >
-            Available ({filteredTasks.length})
+            Available ({availableTasks.length})
           </Text>
         </TouchableOpacity>
 
@@ -248,17 +255,22 @@ export default function BrowseTasks() {
 
       {/* Tasks List */}
       <FlatList
-        data={filteredTasks}
+        data={availableTasks}
         renderItem={renderTask}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="briefcase-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyStateText}>No tasks available</Text>
+            <Text style={styles.emptyStateText}>
+              {tasksLoading ? 'Loading tasks...' : 'No tasks available'}
+            </Text>
             <Text style={styles.emptyStateSubtext}>
-              Check back later for new opportunities
+              {tasksLoading ? 'Please wait' : 'Check back later for new opportunities'}
             </Text>
           </View>
         }
@@ -434,6 +446,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
   },
+  reviews: {
+    fontSize: 12,
+    color: '#999',
+  },
   applicantsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -450,6 +466,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   applyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  assignedButton: {
+    backgroundColor: '#28a745',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  assignedButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
