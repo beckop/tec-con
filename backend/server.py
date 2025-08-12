@@ -302,6 +302,367 @@ async def create_booking(booking: CreateBooking, current_user: dict = Depends(ge
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ======================================
+# TASKRABBIT-STYLE API ENDPOINTS
+# ======================================
+
+# Task Management
+@api_router.get("/tasks")
+async def get_tasks(
+    category_id: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get tasks based on user role and filters"""
+    try:
+        query = supabase.table('tasks').select("""
+            *,
+            task_categories (name, slug, icon, color),
+            customer_profile:profiles!customer_id (full_name, username, avatar_url, average_rating, total_reviews),
+            tasker_profile:profiles!tasker_id (full_name, username, avatar_url, average_rating, total_reviews)
+        """)
+        
+        # Filter by category if specified
+        if category_id:
+            query = query.eq('category_id', category_id)
+            
+        # Filter by status if specified
+        if status:
+            query = query.eq('status', status)
+        
+        # Apply role-based filtering
+        user_role = current_user.get("role", "customer")
+        if user_role == "customer":
+            query = query.eq('customer_id', current_user["id"])
+        elif user_role == "tasker":
+            # Taskers see unassigned tasks or tasks assigned to them
+            query = query.or_(f"tasker_id.is.null,tasker_id.eq.{current_user['id']}")
+        
+        result = query.order('created_at', {'ascending': False}).execute()
+        
+        if result.data:
+            # Get application counts for each task
+            task_ids = [task['id'] for task in result.data]
+            if task_ids:
+                app_result = supabase.table('task_applications').select('task_id').in_('task_id', task_ids).execute()
+                app_counts = {}
+                if app_result.data:
+                    for app in app_result.data:
+                        app_counts[app['task_id']] = app_counts.get(app['task_id'], 0) + 1
+                
+                # Add application counts
+                for task in result.data:
+                    task['applications_count'] = app_counts.get(task['id'], 0)
+        
+        return result.data or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/tasks")
+async def create_task(task_data: dict, current_user: dict = Depends(get_current_user)):
+    """Create a new task"""
+    try:
+        # Ensure user is a customer
+        if current_user.get("role") != "customer":
+            raise HTTPException(status_code=403, detail="Only customers can create tasks")
+        
+        task_data["customer_id"] = current_user["id"]
+        task_data["status"] = "posted"
+        
+        result = supabase.table('tasks').insert(task_data).select().execute()
+        
+        if result.data:
+            return result.data[0]
+        else:
+            raise HTTPException(status_code=500, detail="Failed to create task")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/tasks/{task_id}")
+async def get_task(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific task with detailed information"""
+    try:
+        result = supabase.table('tasks').select("""
+            *,
+            task_categories (name, slug, icon, color),
+            customer_profile:profiles!customer_id (full_name, username, avatar_url, average_rating, total_reviews),
+            tasker_profile:profiles!tasker_id (full_name, username, avatar_url, average_rating, total_reviews)
+        """).eq('id', task_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Task not found")
+            
+        task = result.data[0]
+        
+        # Get applications for this task
+        app_result = supabase.table('task_applications').select("""
+            *,
+            tasker_profile:profiles!tasker_id (full_name, username, avatar_url, average_rating, total_reviews, hourly_rate, bio, skills)
+        """).eq('task_id', task_id).execute()
+        
+        task['applications'] = app_result.data or []
+        task['applications_count'] = len(task['applications'])
+        
+        return task
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/tasks/{task_id}")
+async def update_task(task_id: str, update_data: dict, current_user: dict = Depends(get_current_user)):
+    """Update a task"""
+    try:
+        # Check if user owns the task or is assigned to it
+        task_result = supabase.table('tasks').select('customer_id, tasker_id').eq('id', task_id).execute()
+        
+        if not task_result.data:
+            raise HTTPException(status_code=404, detail="Task not found")
+            
+        task = task_result.data[0]
+        user_id = current_user["id"]
+        
+        if task['customer_id'] != user_id and task.get('tasker_id') != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to update this task")
+        
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+        
+        result = supabase.table('tasks').update(update_data).eq('id', task_id).select().execute()
+        
+        if result.data:
+            return result.data[0]
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update task")
+            
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Task Applications
+@api_router.get("/tasks/{task_id}/applications")
+async def get_task_applications(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Get applications for a specific task"""
+    try:
+        # Check if user owns the task
+        task_result = supabase.table('tasks').select('customer_id').eq('id', task_id).execute()
+        
+        if not task_result.data:
+            raise HTTPException(status_code=404, detail="Task not found")
+            
+        if task_result.data[0]['customer_id'] != current_user["id"]:
+            raise HTTPException(status_code=403, detail="Not authorized to view applications")
+        
+        result = supabase.table('task_applications').select("""
+            *,
+            tasker_profile:profiles!tasker_id (full_name, username, avatar_url, average_rating, total_reviews, hourly_rate, bio, skills)
+        """).eq('task_id', task_id).execute()
+        
+        return result.data or []
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/tasks/{task_id}/applications")
+async def apply_to_task(task_id: str, application_data: dict, current_user: dict = Depends(get_current_user)):
+    """Apply to a task"""
+    try:
+        # Ensure user is a tasker
+        if current_user.get("role") != "tasker":
+            raise HTTPException(status_code=403, detail="Only taskers can apply to tasks")
+        
+        # Check if task exists and is available
+        task_result = supabase.table('tasks').select('status, customer_id').eq('id', task_id).execute()
+        
+        if not task_result.data:
+            raise HTTPException(status_code=404, detail="Task not found")
+            
+        task = task_result.data[0]
+        if task['status'] != 'posted':
+            raise HTTPException(status_code=400, detail="Task is not available for applications")
+            
+        if task['customer_id'] == current_user["id"]:
+            raise HTTPException(status_code=400, detail="Cannot apply to your own task")
+        
+        application_data["task_id"] = task_id
+        application_data["tasker_id"] = current_user["id"]
+        application_data["status"] = "pending"
+        
+        result = supabase.table('task_applications').insert(application_data).select().execute()
+        
+        if result.data:
+            return result.data[0]
+        else:
+            raise HTTPException(status_code=500, detail="Failed to create application")
+            
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/applications/{application_id}")
+async def update_application(application_id: str, update_data: dict, current_user: dict = Depends(get_current_user)):
+    """Update an application status (accept/reject)"""
+    try:
+        # Get application details
+        app_result = supabase.table('task_applications').select("""
+            *,
+            task:tasks!task_id (customer_id, tasker_id)
+        """).eq('id', application_id).execute()
+        
+        if not app_result.data:
+            raise HTTPException(status_code=404, detail="Application not found")
+            
+        application = app_result.data[0]
+        user_id = current_user["id"]
+        
+        # Check permissions
+        if application['task']['customer_id'] != user_id and application['tasker_id'] != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to update this application")
+        
+        # If accepting an application, assign the tasker to the task
+        if update_data.get('status') == 'accepted' and application['task']['customer_id'] == user_id:
+            # Update task to assign tasker
+            supabase.table('tasks').update({
+                'tasker_id': application['tasker_id'],
+                'status': 'assigned',
+                'updated_at': datetime.utcnow().isoformat()
+            }).eq('id', application['task_id']).execute()
+        
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+        
+        result = supabase.table('task_applications').update(update_data).eq('id', application_id).select().execute()
+        
+        if result.data:
+            return result.data[0]
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update application")
+            
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Messaging
+@api_router.get("/tasks/{task_id}/messages")
+async def get_task_messages(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Get messages for a specific task"""
+    try:
+        # Check if user has access to this task
+        task_result = supabase.table('tasks').select('customer_id, tasker_id').eq('id', task_id).execute()
+        
+        if not task_result.data:
+            raise HTTPException(status_code=404, detail="Task not found")
+            
+        task = task_result.data[0]
+        user_id = current_user["id"]
+        
+        if task['customer_id'] != user_id and task.get('tasker_id') != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to view messages")
+        
+        result = supabase.table('messages').select("""
+            *,
+            sender_profile:profiles!sender_id (full_name, username, avatar_url)
+        """).eq('task_id', task_id).order('created_at').execute()
+        
+        # Mark messages as read
+        supabase.table('messages').update({
+            'read_at': datetime.utcnow().isoformat()
+        }).eq('task_id', task_id).eq('receiver_id', user_id).is_('read_at', 'null').execute()
+        
+        return result.data or []
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/tasks/{task_id}/messages")
+async def send_message(task_id: str, message_data: dict, current_user: dict = Depends(get_current_user)):
+    """Send a message for a specific task"""
+    try:
+        # Check if user has access to this task
+        task_result = supabase.table('tasks').select('customer_id, tasker_id').eq('id', task_id).execute()
+        
+        if not task_result.data:
+            raise HTTPException(status_code=404, detail="Task not found")
+            
+        task = task_result.data[0]
+        user_id = current_user["id"]
+        
+        if task['customer_id'] != user_id and task.get('tasker_id') != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to send messages")
+        
+        # Determine receiver
+        receiver_id = task['tasker_id'] if task['customer_id'] == user_id else task['customer_id']
+        
+        if not receiver_id:
+            raise HTTPException(status_code=400, detail="Task must have both customer and tasker to send messages")
+        
+        message_data.update({
+            "task_id": task_id,
+            "sender_id": user_id,
+            "receiver_id": receiver_id,
+            "message_type": message_data.get("message_type", "text")
+        })
+        
+        result = supabase.table('messages').insert(message_data).select("""
+            *,
+            sender_profile:profiles!sender_id (full_name, username, avatar_url)
+        """).execute()
+        
+        if result.data:
+            return result.data[0]
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send message")
+            
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Profile Management
+@api_router.get("/profile")
+async def get_current_profile(current_user: dict = Depends(get_current_user)):
+    """Get current user's profile"""
+    try:
+        result = supabase.table('profiles').select('*').eq('id', current_user["id"]).execute()
+        
+        if result.data:
+            return result.data[0]
+        else:
+            raise HTTPException(status_code=404, detail="Profile not found")
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/profile")
+async def update_profile(profile_data: dict, current_user: dict = Depends(get_current_user)):
+    """Update current user's profile"""
+    try:
+        profile_data["updated_at"] = datetime.utcnow().isoformat()
+        
+        result = supabase.table('profiles').update(profile_data).eq('id', current_user["id"]).select().execute()
+        
+        if result.data:
+            return result.data[0]
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update profile")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Task Categories
+@api_router.get("/categories")
+async def get_categories():
+    """Get all active task categories"""
+    try:
+        result = supabase.table('task_categories').select('*').eq('is_active', True).order('sort_order').execute()
+        return result.data or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Include the router in the main app
 app.include_router(api_router)
 
