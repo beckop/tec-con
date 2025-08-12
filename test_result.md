@@ -147,11 +147,14 @@ backend:
     file: "backend/server.py"
     stuck_count: 1
     priority: "medium"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
         - working: false
           agent: "testing"
           comment: "GET /api/profiles/{user_id} endpoint fails with 500 error. Supabase error: 'Could not find the table public.profiles in the schema cache'. The profiles table needs to be created in Supabase database."
+        - working: "NA"
+          agent: "main"
+          comment: "Added comprehensive TaskRabbit API endpoints for tasks, applications, messages, and profiles. Backend expanded with full CRUD operations."
 
   - task: "Get Bookings Authentication"
     implemented: true
@@ -188,6 +191,66 @@ backend:
         - working: true
           agent: "testing"
           comment: "POST /api/bookings booking creation working correctly. Creates booking with proper UUID, customer_id from auth, service_type, description, location, status (pending), and timestamps. All required fields present in response."
+
+  - task: "Tasks Management API"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Implemented comprehensive tasks API with GET /api/tasks, POST /api/tasks, GET /api/tasks/{id}, PUT /api/tasks/{id} endpoints with role-based filtering and full CRUD operations."
+
+  - task: "Task Applications API"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Implemented task applications API with GET /api/tasks/{id}/applications, POST /api/tasks/{id}/applications, PUT /api/applications/{id} endpoints for managing task applications."
+
+  - task: "Messaging API"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Implemented messaging API with GET /api/tasks/{id}/messages, POST /api/tasks/{id}/messages endpoints for task-based communication."
+
+  - task: "Profile Management API"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Implemented profile management API with GET /api/profile, PUT /api/profile endpoints for user profile CRUD operations."
+
+  - task: "Categories API"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Implemented categories API with GET /api/categories endpoint for retrieving task categories from database."
 
 frontend:
   # No frontend testing performed as per instructions
